@@ -1,0 +1,134 @@
+
+
+Setup and Configure Sftp to Use SSL and Openssh Server
+=========================================================================
+
+1- Update your repository and install VSFTPD package
+$ yum check-update
+$ yum -y install vsftpd
+
+2. create a subdirectory within the SSL directory to store our files:
+$ sudo mkdir /etc/ssl/private
+
+3. To create the certificate and the key in a single file, we can use this command: 
+$ openssl req -x509 -nodes -days 365 -newkey rsa:1024 -keyout /etc/ssl/private/vsftpd.pem -out /etc/ssl/private/vsftpd.pem
+
+4. Add the SSL Details to the vsftpd Configuration File
+$ sudo nano /etc/vsftpd/vsftpd.conf
+
+5. Scroll to the bottom of the file. We will add our SSL/TLS information here.
+We need to specify the location of our certificate and key files. We actually combined both pieces of information into a single file, so we will point both options to the same file:
+
+-----------------------------------------------------
+rsa_cert_file=/etc/ssl/private/vsftpd.pem
+rsa_private_key_file=/etc/ssl/private/vsftpd.pem
+-----------------------------------------------------
+
+Next, we need enable the use of these files and disable anonymous users. We should also force the use of SSL for both data transfer and login routines. This will make the security mandatory:
+
+-----------------------------------------------------
+ssl_enable=YES
+allow_anon_ssl=NO
+force_local_data_ssl=YES
+force_local_logins_ssl=YES
+-----------------------------------------------------
+
+Next, we will restrict the type of connection to TLS, which is more secure than SSL. We will do this by explicitly allowing TLS and denying the use of SSL:
+
+-----------------------------------------------------
+ssl_tlsv1=YES
+ssl_sslv2=NO
+ssl_sslv3=NO
+-----------------------------------------------------
+
+We'll add a few more configuration options before finishing:
+
+-----------------------------------------------------
+require_ssl_reuse=NO
+ssl_ciphers=HIGH
+-----------------------------------------------------
+
+6. Save and close the file.
+We need to restart vsftpd to enable our changes:
+
+$ sudo /etc/init.d/vsftpd restart
+$ systemctl restart vsftpd.service
+
+7. We will also configure it to start automatically with every reboot:
+$ sudo chkconfig vsftpd on
+$ systemctl enable vsftpd.service
+
+8. Now open the file and make changes as below
+$ nano /etc/vsftpd/vsftpd.conf
+
+  anonymous_enable=NO 
+  chroot_local_user=YES
+  allow_writeable_chroot=YES
+  write_enable=YES
+
+  pasv_enable=Yes
+  pasv_min_port=40000
+  pasv_max_port=40100
+
+9. Now restart vsftpd service
+$ systemctl restart vsftpd.service
+
+10. Now we create SFTP server (Secure File Transfer Protocol) is used to encrypt connections between clients and the FTP server. It is highly recommended to use SFTP because data is transferred over encrypted connection using SSH-tunnel on port 22
+
+11. Create a separate group for FTP access.
+$ groupadd ftpaccess
+
+12. Now open /etc/ssh/sshd_config file and make changes as below.
+Find and comment the below line
+#Subsystem sftp /usr/libexec/openssh/sftp-server
+
+and add these lines below.
+
+---------------------------------------------------
+Subsystem sftp internal-sftp
+Match group ftpaccess
+ChrootDirectory %h
+X11Forwarding no
+AllowTcpForwarding no
+ForceCommand internal-sftp
+----------------------------------------------------
+
+13. Now restart sshd service.
+$ systemctl restart sshd
+
+14. Create user jack with /sbin/nologin shell and ftpaccess group
+
+$ useradd -m jack -s /sbin/nologin -g ftpaccess
+$ passwd jack
+
+15. Now assign root ownership for the home directory for chroot access and modify permission
+
+$ chown root /home/jack
+$ chmod 750 /home/jack
+
+16. Create a directory www inside home directory for writing and modify ownership
+
+$ mkdir /home/jack/www
+$ chown jack:ftpaccess /home/jack/www
+
+Now jack can use both ftp and sftp services . He can upload files in www directory
+
+17. If you are going to use FTP and SFTP together in the same server, you should follow above steps while creating users . For existing users add them to ftpaccess and make below changes.
+
+$ useradd -m dave -s /sbin/nologin -g ftpaccess
+$ passwd dave
+$ chown root /home/dave
+$ chmod 750 /home/dave
+$ mkdir /home/dave/www
+$ chown dave:ftpaccess /home/dave/www
+
+
+
+Finishh
+Have a nice day.. ^_^
+
+
+source :
+http://www.krizna.com/centos/setup-ftp-server-centos-7-vsftp/
+https://www.digitalocean.com/community/tutorials/how-to-configure-vsftpd-to-use-ssl-tls-on-a-centos-vps
+https://wp-dreams.com/articles/2015/01/ftp-sftp-beginners-guide-to-digital-ocean/
